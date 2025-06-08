@@ -3,6 +3,7 @@ import spacy
 from transformers import pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 import os
+from utils import assign_themes, get_top_keywords
 
 # Load preprocessed reviews
 reviews_df = pd.read_csv('data/raw/reviews.csv')
@@ -10,6 +11,8 @@ reviews_df = pd.read_csv('data/raw/reviews.csv')
 # Initialize NLP tools
 nlp = spacy.load('en_core_web_sm')
 sentiment_analyzer = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+vader_analyzer = SentimentIntensityAnalyzer()
 
 # Preprocess text
 def preprocess_text(text):
@@ -20,8 +23,14 @@ reviews_df['processed_review'] = reviews_df['review'].apply(preprocess_text)
 
 # Perform sentiment analysis
 def get_sentiment(text):
-    result = sentiment_analyzer(text)[0]
-    return result['label'], result['score']
+    distilbert_result = sentiment_analyzer(text)[0]
+    vader_result = vader_analyzer.polarity_scores(text)
+    label = distilbert_result['label']
+    score = distilbert_result['score']
+    if -0.1 <= vader_result['compound'] <= 0.1:  # Neutral range
+        label = 'NEUTRAL'
+        score = vader_result['compound'] + 0.5  # Normalize to [0,1]
+    return label, score
 
 reviews_df[['sentiment_label', 'sentiment_score']] = reviews_df['processed_review'].apply(lambda x: pd.Series(get_sentiment(x)))
 
@@ -30,35 +39,16 @@ sentiment_agg = reviews_df.groupby(['bank', 'rating']).agg({'sentiment_score': '
 
 # Extract themes using TF-IDF
 try:
-    tfidf = TfidfVectorizer(max_features=20)  # Increased to support more keywords
+    tfidf = TfidfVectorizer(max_features=20)
     tfidf_matrix = tfidf.fit_transform(reviews_df['processed_review'])
     feature_names = tfidf.get_feature_names_out()
-
-    def get_top_keywords(matrix, features, top_n=15):
-        return [features[i] for i in matrix.indices[:top_n]] if matrix.indices.size else []
 
     reviews_df['keywords'] = [get_top_keywords(matrix, feature_names) for matrix in tfidf_matrix]
     print("Keywords extraction completed. Sample keywords:", reviews_df['keywords'].head().tolist())
 except Exception as e:
     print(f"Error in keywords extraction: {e}")
 
-# Manually group themes
-def assign_themes(keywords, bank):
-    themes = []
-    # Screenshot Restrictions
-    if any(kw in ['screenshot', 'gallery', 'photo', 'image', 'capture', 'snap', 'picture', 'save', 'evidence'] for kw in keywords):
-        themes.append('Screenshot Restrictions')
-    # App Stability
-    if any(kw in ['crash', 'bug', 'unreliable', 'fail', 'freeze', 'error', 'slow', 'lag', 'down'] for kw in keywords):
-        themes.append('App Stability')
-    # Security Features
-    if any(kw in ['security', 'developer', 'option', 'lock', 'verify', 'password', 'auth', 'access', 'protect'] for kw in keywords):
-        themes.append('Security Features')
-    # Transaction Issues
-    if any(kw in ['transaction', 'payment', 'transfer', 'delay', 'debit', 'withdraw', 'deposit', 'issue', 'fund'] for kw in keywords):
-        themes.append('Transaction Issues')
-    return themes[:3]  # Allow up to 3 themes for KPI
-
+# Assign themes
 try:
     reviews_df['themes'] = [assign_themes(kw, bank) for kw, bank in zip(reviews_df['keywords'], reviews_df['bank'])]
     print("Themes assignment completed. Sample themes:", reviews_df['themes'].head().tolist())
