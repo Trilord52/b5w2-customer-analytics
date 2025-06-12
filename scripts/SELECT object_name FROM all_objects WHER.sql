@@ -1,0 +1,1 @@
+SELECT object_name FROM all_objects WHERE owner = 'BANK_REVIEWS' AND object_type IN ('TABLE', 'SEQUENCE');

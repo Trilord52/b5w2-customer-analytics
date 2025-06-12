@@ -17,7 +17,7 @@ def assign_themes(keywords, bank):
     # Transaction Issues
     if any(kw in ['transaction', 'payment', 'transfer', 'delay', 'debit', 'withdraw', 'deposit', 'issue', 'fund'] for kw in keywords):
         themes.append('Transaction Issues')
-    # Fallback neutral theme for reviews with no specific issues
+    # Positive User Experience
     if not themes and any(kw in ['good', 'great', 'nice', 'easy', 'convenient'] for kw in keywords):
         themes.append('Positive User Experience')
     return themes[:3]  # Limit to 3 themes
