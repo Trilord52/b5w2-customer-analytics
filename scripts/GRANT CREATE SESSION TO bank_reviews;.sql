@@ -1,0 +1,1 @@
+GRANT CREATE SESSION TO bank_reviews;
